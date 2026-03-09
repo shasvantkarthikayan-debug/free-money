@@ -1,0 +1,186 @@
+import tkinter as tk
+from tkinter import messagebox
+import threading
+import time
+import random
+import os
+import sys
+import json
+from datetime import datetime
+
+class GorillaRansomwareDemo:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.withdraw()  # Hide initially
+        
+        # Fake encryption phase
+        self.fake_encrypt()
+        
+        # Ransom screen
+        self.show_ransom_screen()
+    
+    def fake_encrypt(self):
+        """Fake file encryption simulation"""
+        root = tk.Tk()
+        root.title("GORILLA RANSOMWARE")
+        root.attributes('-fullscreen', True)
+        root.attributes('-topmost', True)
+        root.configure(bg='black')
+        root.overrideredirect(True)
+        
+        # Gorilla ASCII art
+        gorilla = """
+    ╔════════════════════════════════════╗
+    ║  🦍  GORILLA RANSOMWARE v2.0  🦍  ║
+    ║                                    ║
+    ║  ALL FILES ENCRYPTED!              ║
+    ║  PAY 1 BTC OR LOSE EVERYTHING!     ║
+    ║                                    ║
+    ╚════════════════════════════════════╝
+        """
+        
+        label = tk.Label(root, text=gorilla, font=('Courier', 16), fg='red', bg='black')
+        label.pack(expand=True)
+        
+        # Fake progress
+        progress = tk.Label(root, text="ENCRYPTING FILES: [          ] 0%", 
+                          font=('Courier', 14), fg='green', bg='black')
+        progress.pack(pady=20)
+        
+        def fake_progress():
+            for i in range(101):
+                bars = "█" * (i // 2) + "░" * (50 - i // 2)
+                progress.config(text=f"ENCRYPTING FILES: [{bars}] {i}%")
+                root.update()
+                time.sleep(0.05)
+            root.destroy()
+        
+        threading.Thread(target=fake_progress, daemon=True).start()
+        root.mainloop()
+    
+    def show_ransom_screen(self):
+        self.root.deiconify()
+        self.root.attributes('-fullscreen', True)
+        self.root.attributes('-topmost', True)
+        self.root.configure(bg='black')
+        self.root.overrideredirect(True)
+        
+        # Bind ESC for demo exit
+        self.root.bind('<Escape>', self.recover_files)
+        self.root.focus_set()
+        
+        # Animated gorilla + ransom note
+        self.canvas = tk.Canvas(self.root, bg='black', highlightthickness=0)
+        self.canvas.pack(fill=tk.BOTH, expand=True)
+        
+        # Draw gorilla (animated)
+        self.gorilla_x = 100
+        self.gorilla_eye = 0
+        
+        self.ransom_text()
+        self.animate_gorilla()
+        self.countdown()
+    
+    def ransom_text(self):
+        note = """🦍 GORILLA RANSOMWARE 🦍
+
+YOUR FILES ARE ENCRYPTED!
+PAY 1.23456 BTC TO: bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
+
+OR PRESS ESC FOR PENTEST RECOVERY
+
+Files affected: 1,337,420
+Ransom due: 23:59:59
+
+PENTEST DEMO - AUTHORIZED TESTING ONLY"""
+        
+        text_id = self.canvas.create_text(960, 400, text=note, 
+                                        font=('Courier', 20, 'bold'), 
+                                        fill='red', anchor='center')
+    
+    def animate_gorilla(self):
+        def draw_frame():
+            if hasattr(self, 'gorilla_id'):
+                self.canvas.delete(self.gorilla_id)
+            
+            # Animated gorilla eyes
+            eye_char = "😠" if self.gorilla_eye % 2 else "👹"
+            self.gorilla_eye += 1
+            
+            gorilla = f"""
+  {eye_char}  GORILLA  {eye_char}
+ /|\\_/|\\
+( o.o ) 
+ > ^ <
+PAY OR BANANA!
+            """
+            
+            self.gorilla_id = self.canvas.create_text(200, 200, text=gorilla,
+                                                    font=('Courier', 18), 
+                                                    fill='yellow', anchor='nw')
+            
+            self.root.after(500, animate_gorilla)
+        
+        def animate_gorilla():
+            draw_frame()
+        
+        animate_gorilla()
+    
+    def countdown(self):
+        time_left = 3599  # 1 hour fake timer
+        clock_id = self.canvas.create_text(960, 100, text="59:59", 
+                                         font=('Arial', 48, 'bold'), 
+                                         fill='red', anchor='center')
+        
+        def tick():
+            nonlocal time_left
+            mins, secs = divmod(time_left, 60)
+            self.canvas.itemconfig(clock_id, text=f"{mins:02d}:{secs:02d}")
+            
+            if time_left > 0:
+                time_left -= 1
+                self.root.after(1000, tick)
+        
+        tick()
+    
+    def recover_files(self, event=None):
+        """Safe recovery - teaches cleanup"""
+        self.root.withdraw()
+        
+        recovery = tk.Tk()
+        recovery.title("PENTEST RECOVERY")
+        recovery.geometry("600x400")
+        recovery.attributes('-topmost', True)
+        
+        tk.Label(recovery, text="🦍 GORILLA RANSOMWARE\nPENTEST RECOVERY COMPLETE 🦍", 
+                font=('Arial', 24, 'bold')).pack(pady=20)
+        
+        tk.Label(recovery, text="""DEMO FILES "RECOVERED":
+
+✓ No files were actually encrypted
+✓ This was authorized pentesting
+✓ Registry persistence removed
+✓ Full system recovery complete
+
+Lessons learned:
+• Backup importance
+• Endpoint detection
+• User training needs""", 
+                justify='left', font=('Courier', 12)).pack(pady=20, padx=20)
+        
+        tk.Button(recovery, text="CLOSE DEMO", command=recovery.destroy,
+                 font=('Arial', 16, 'bold'), bg='green').pack(pady=20)
+        
+        # Clean registry
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
+                               r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", 
+                               0, winreg.KEY_SET_VALUE)
+            winreg.DeleteValue(key, "GorillaDemo")
+            winreg.CloseKey(key)
+        except:
+            pass
+
+if __name__ == '__main__':
+    GorillaRansomwareDemo()
