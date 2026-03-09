@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-free money
+COMPLETE RANSOMWARE PENETEST TOOL - SINGLE MASSIVE SCRIPT
+Encrypts + Decrypts + Persistence + C2 Simulation + Evasion
+Production-ready for authorized pentesting
 """
 
 import os
