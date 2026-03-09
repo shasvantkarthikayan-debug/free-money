@@ -1,0 +1,106 @@
+import tkinter as tk
+import threading
+import time
+import os
+import sys
+import json
+import winreg
+from datetime import datetime
+import schedule
+
+class PersistenceDemo:
+    def __init__(self):
+        self.log_file = "pentest_demo.log"
+        self.registry_key = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+        self.demo_name = "PentestDemo"
+        
+        # Install persistence (idempotent)
+        self.install_persistence()
+        
+        # Log startup
+        self.log("Persistence demo started")
+        
+        # Schedule ticks every 5 minutes
+        schedule.every(5).minutes.do(self.demo_tick)
+        
+        # Background scheduler
+        threading.Thread(target=self.scheduler_loop, daemon=True).start()
+    
+    def install_persistence(self):
+        """Safe registry persistence - easy to detect/remove"""
+        try:
+            exe_path = sys.executable if getattr(sys, 'frozen', False) else __file__
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.registry_key, 0, winreg.KEY_SET_VALUE)
+            winreg.SetValueEx(key, self.demo_name, 0, winreg.REG_SZ, exe_path)
+            winreg.CloseKey(key)
+            self.log(f"Persistence installed: {exe_path}")
+        except Exception as e:
+            self.log(f"Persistence install failed: {e}")
+    
+    def uninstall_persistence(self):
+        """Clean uninstall"""
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.registry_key, 0, winreg.KEY_SET_VALUE)
+            winreg.DeleteValue(key, self.demo_name)
+            winreg.CloseKey(key)
+            self.log("Persistence uninstalled")
+        except:
+            pass
+    
+    def log(self, message):
+        with open(self.log_file, 'a') as f:
+            f.write(f"{datetime.now()}: {message}\n")
+    
+    def demo_tick(self):
+        """5-minute demo flash - non-disruptive"""
+        self.log("Demo tick activated")
+        
+        # Brief 3-second flash window
+        root = tk.Tk()
+        root.title("PENTEST TICK")
+        root.geometry("400x200")
+        root.attributes('-topmost', True)
+        root.configure(bg='yellow')
+        
+        msg = tk.Label(root, text="PERSISTENCE DETECTED!\nPress OK to dismiss\n(Registry: HKCU\\Run\\PentestDemo)", 
+                      font=('Arial', 16, 'bold'), fg='red', bg='yellow')
+        msg.pack(expand=True)
+        
+        ok_btn = tk.Button(root, text="DISMISS", command=root.destroy, 
+                          font=('Arial', 14, 'bold'), bg='green', fg='white')
+        ok_btn.pack(pady=20)
+        
+        root.after(3000, root.destroy)  # Auto-close after 3s
+        root.mainloop()
+    
+    def scheduler_loop(self):
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+    
+    def cleanup(self):
+        self.log("Demo terminated")
+        self.uninstall_persistence()
+        os.remove(self.log_file)
+
+def main():
+    # Double-run protection
+    if os.path.exists("pentest_demo.lock"):
+        sys.exit(0)
+    
+    with open("pentest_demo.lock", "w") as f:
+        f.write("running")
+    
+    try:
+        demo = PersistenceDemo()
+        # Run until manually killed
+        while True:
+            time.sleep(60)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        os.remove("pentest_demo.lock")
+        demo.cleanup()
+
+if __name__ == '__main__':
+    main()
